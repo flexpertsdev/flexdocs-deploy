@@ -1,6 +1,9 @@
 // Netlify Function to handle all API endpoints
 const API_KEYS = {
   'demo-key-123': 'demo-project',
+    'a7b9c3d4-e5f6-7890-abcd-1234567890ef': 'synthetron',
+    // The value is just a project identifier
+
   // Add more API keys as needed
 };
 
