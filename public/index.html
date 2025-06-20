@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlexDocs - Claude Context Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: #1a1a1a;
+            padding: 20px 0;
+            border-bottom: 1px solid #333;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 28px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+        }
+        
+        .status {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .file-grid {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        }
+        
+        .file-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            transition: border-color 0.3s;
+        }
+        
+        .file-card:hover {
+            border-color: #667eea;
+        }
+        
+        .file-path {
+            color: #667eea;
+            font-weight: 500;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+        
+        .file-preview {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .file-meta {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5a67d8;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .error {
+            background: #2a1a1a;
+            border: 1px solid #aa3333;
+            color: #ff6b6b;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .sync-info {
+            background: #1a2a1a;
+            border: 1px solid #336633;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>
+                <div class="logo"></div>
+                FlexDocs
+            </h1>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="status" id="status">
+            <p>Project ID: <strong id="projectId">Loading...</strong></p>
+            <p>Files: <strong id="fileCount">-</strong></p>
+            <p>Last Sync: <strong id="lastSync">-</strong></p>
+        </div>
+        
+        <div class="actions">
+            <button onclick="refreshFiles()">Refresh</button>
+            <button onclick="showSyncInstructions()">Sync Instructions</button>
+        </div>
+        
+        <div id="syncInfo" class="sync-info" style="display: none;">
+            <h3>Sync Instructions</h3>
+            <p>1. Download sync script: <a href="/sync-script.sh" download>sync-script.sh</a></p>
+            <p>2. Place it in your project root</p>
+            <p>3. Double-click to pull files from cloud</p>
+            <p>4. Run with 'push' argument to upload: ./sync-script.sh push</p>
+            <p>API Key: <code id="apiKey">demo-key-123</code></p>
+        </div>
+        
+        <div id="loading" class="loading">Loading files...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="fileGrid" class="file-grid" style="display: none;"></div>
+        
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <h2>No Claude context files yet</h2>
+            <p>Use the sync script to upload your CLAUDE.md files</p>
+        </div>
+    </div>
+    
+    <script>
+        const API_KEY = 'demo-key-123';
+        const API_URL = '/.netlify/functions/api';
+        
+        async function loadProject() {
+            try {
+                const response = await fetch(`${API_URL}/project`, {
+                    headers: { 'x-api-key': API_KEY }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load project');
+                
+                const data = await response.json();
+                document.getElementById('projectId').textContent = data.projectId;
+                document.getElementById('fileCount').textContent = data.fileCount;
+                document.getElementById('lastSync').textContent = new Date(data.lastSync).toLocaleString();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+        
+        async function loadFiles() {
+            const loading = document.getElementById('loading');
+            const fileGrid = document.getElementById('fileGrid');
+            const emptyState = document.getElementById('emptyState');
+            
+            loading.style.display = 'block';
+            fileGrid.style.display = 'none';
+            emptyState.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_URL}/files`, {
+                    headers: { 'x-api-key': API_KEY }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load files');
+                
+                const data = await response.json();
+                loading.style.display = 'none';
+                
+                if (data.files.length === 0) {
+                    emptyState.style.display = 'block';
+                    return;
+                }
+                
+                fileGrid.innerHTML = data.files.map(file => `
+                    <div class="file-card">
+                        <div class="file-path">${escapeHtml(file.path)}</div>
+                        <div class="file-preview">${escapeHtml(file.content.substring(0, 500))}</div>
+                        <div class="file-meta">
+                            ${file.content.length} characters
+                            ${file.lastModified ? `• ${new Date(file.lastModified).toLocaleString()}` : ''}
+                        </div>
+                    </div>
+                `).join('');
+                
+                fileGrid.style.display = 'grid';
+                
+            } catch (error) {
+                loading.style.display = 'none';
+                showError(error.message);
+            }
+        }
+        
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = `Error: ${message}`;
+            errorEl.style.display = 'block';
+            setTimeout(() => errorEl.style.display = 'none', 5000);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function showSyncInstructions() {
+            const syncInfo = document.getElementById('syncInfo');
+            syncInfo.style.display = syncInfo.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function refreshFiles() {
+            loadProject();
+            loadFiles();
+        }
+        
+        // Initial load
+        loadProject();
+        loadFiles();
+    </script>
+</body>
+</html>
